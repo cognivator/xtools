@@ -88,3 +88,30 @@ parameters:
           color: ''
           category: 'Category:Unknown-importance articles'
           weight: 0
+    en.wikivoyage.org:
+      wikiproject_prefix: ''
+      class:
+        Star:
+          badge: 'b/b4/Symbol_star_gold.svg'
+          color: '#eecc33'
+          category: 'Category:Star articles'
+        Guide:
+          badge: '9/94/Symbol_support_vote.svg'
+          color: '#66ff66'
+          category: 'Category:Guide articles'
+        Usable:
+          badge: 'd/d0/Symbol_keep_vote.svg'
+          color: '#66ffff'
+          category: 'Category:Usable articles'
+        Outline:
+          badge: 'c/c8/Start-icon.svg'
+          color: '#ffaa66'
+          category: 'Category:Outline articles'
+        Stub:
+          badge: 'f/f3/Symbol_plain_grey.svg'
+          color: '#dcdcdc'
+          category: 'Category:Stub articles'
+        VfD:
+          badge: '8/85/Symbol_unrelated.svg'
+          color: '#e53e3e'
+          category: 'Category:VfD'
