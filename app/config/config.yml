@@ -172,6 +172,17 @@ fos_rest:
             json: ['application/json']
             html: ['text/html']
 
+guzzle:
+    logging: true
+
+    clients:
+        xtools:
+            base_url: "localhost/app_dev.php/"
+            options:
+                headers:
+                    Accept: "application/json"
+                timeout: 30
+
 monolog:
     channels: ['rate_limit']
     handlers:

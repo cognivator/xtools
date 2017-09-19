@@ -9,6 +9,8 @@ use DateTime;
 use Exception;
 use DatePeriod;
 use DateInterval;
+use GuzzleHttp;
+use GuzzleHttp\Promise\Promise;
 
 /**
  * An EditCounter provides statistics about a user's edits on a project.
@@ -46,6 +48,9 @@ class EditCounter extends Model
     /** @var array Block data, with keys 'set' and 'received'. */
     protected $blocks;
 
+    /** @var integer[] Array keys are namespace IDs, values are the edit counts */
+    protected $namespaceTotals;
+
     /** @var int Number of semi-automated edits */
     protected $autoEditCount;
 
@@ -76,13 +81,51 @@ class EditCounter extends Model
         $this->user = $user;
     }
 
+    public function prepareData($container)
+    {
+        $client = $container->get('guzzle.client.xtools');
+        $project = $this->project->getDomain();
+        $username = $this->user->getUsername();
+
+        $endpoints = [
+            "pair_data" => "ec-pairdata/$project/$username",
+            "log_counts" => "ec-logcounts/$project/$username",
+            "namespace_totals" => "ec-namespacetotals/$project/$username",
+            "edit_sizes" => "ec-editsizes/$project/$username",
+            "month_counts" => "ec-monthcounts/$project/$username",
+            "automated" => "api/user/automated_editcount/$project/$username",
+        ];
+        $promises = [];
+        $results = [];
+
+        foreach ($endpoints as $key => $endpoint) {
+            $promise = $client->getAsync($endpoint);
+            $promises[] = $promise;
+            $promise->then(function($response) use (&$results, $key) {
+                $results[$key] = (array) json_decode($response->getBody()->getContents());
+            });
+        }
+
+        GuzzleHttp\Promise\settle($promises)->wait();
+
+        // Copy to class instance
+        $this->pairData = $results['pair_data'];
+        $this->logCounts = $results['log_counts'];
+        $this->namespaceTotals = $results['namespace_totals'];
+        $this->editSizeData = $results['edit_sizes'];
+        $this->monthCounts = $results['month_counts'];
+        $this->autoEditCount = $results['automated']['automated_editcount'];
+
+        return $results;
+    }
+
     /**
      * Get revision and page counts etc.
      * @return int[]
      */
-    protected function getPairData()
+    public function getPairData()
     {
-        if (! is_array($this->pairData)) {
+        if (!is_array($this->pairData)) {
             $this->pairData = $this->getRepository()
                 ->getPairData($this->project, $this->user);
         }
@@ -93,9 +136,9 @@ class EditCounter extends Model
      * Get revision dates.
      * @return int[]
      */
-    protected function getLogCounts()
+    public function getLogCounts()
     {
-        if (! is_array($this->logCounts)) {
+        if (!is_array($this->logCounts)) {
             $this->logCounts = $this->getRepository()
                 ->getLogCounts($this->project, $this->user);
         }
@@ -107,7 +150,7 @@ class EditCounter extends Model
      * @param string $type Either 'set' or 'received'.
      * @return array
      */
-    protected function getBlocks($type)
+    public function getBlocks($type)
     {
         if (isset($this->blocks[$type]) && is_array($this->blocks[$type])) {
             return $this->blocks[$type];
@@ -116,6 +159,15 @@ class EditCounter extends Model
         $blocks = $this->getRepository()->$method($this->project, $this->user);
         $this->blocks[$type] = $blocks;
         return $this->blocks[$type];
+    }
+
+    /**
+     * Use Guzzle to get all the general stats at once.
+     * @return array Pair data, automated edits
+     */
+    public function getGeneralStats()
+    {
+        return $this->getRepository()->getGeneralStats();
     }
 
     /**
@@ -583,8 +635,12 @@ class EditCounter extends Model
      */
     public function namespaceTotals()
     {
+        if ($this->namespaceTotals) {
+            return $this->namespaceTotals;
+        }
         $counts = $this->getRepository()->getNamespaceTotals($this->project, $this->user);
         arsort($counts);
+        $this->namespaceTotals = $counts;
         return $counts;
     }
 
@@ -705,6 +761,10 @@ class EditCounter extends Model
      */
     public function yearCounts($currentTime = null)
     {
+        if (isset($this->yearCounts)) {
+            return $this->yearCounts;
+        }
+
         $out = $this->monthCounts($currentTime);
 
         foreach ($out['totals'] as $nsId => $years) {
@@ -713,6 +773,7 @@ class EditCounter extends Model
             }
         }
 
+        $this->yearCounts = $out;
         return $out;
     }
 
@@ -822,9 +883,9 @@ class EditCounter extends Model
      * Get average edit size, and number of large and small edits.
      * @return int[]
      */
-    protected function getEditSizeData()
+    public function getEditSizeData()
     {
-        if (! is_array($this->editSizeData)) {
+        if (!is_array($this->editSizeData)) {
             $this->editSizeData = $this->getRepository()
                 ->getEditSizeData($this->project, $this->user);
         }

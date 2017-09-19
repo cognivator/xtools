@@ -7,9 +7,10 @@ namespace AppBundle\Controller;
 
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\Route;
 use Symfony\Bundle\FrameworkBundle\Controller\Controller;
-use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\RedirectResponse;
+use Symfony\Component\HttpFoundation\JsonResponse;
 use Xtools\EditCounter;
 use Xtools\EditCounterRepository;
 use Xtools\Page;
@@ -52,7 +53,16 @@ class EditCounterController extends Controller
         $this->project = ProjectRepository::getProject($project, $this->container);
         $this->user = UserRepository::getUser($username, $this->container);
 
-        // Get an edit-counter.
+        // Don't continue if the user doesn't exist.
+        if (!$this->user->existsOnProject($this->project)) {
+            $this->addFlash('notice', 'user-not-found');
+            return $this->redirectToRoute('ec');
+        }
+
+        // Get an edit-counter if we don't already have it set.
+        if ($this->editCounter instanceof EditCounter) {
+            return;
+        }
         $editCounterRepo = new EditCounterRepository();
         $editCounterRepo->setContainer($this->container);
         $this->editCounter = new EditCounter($this->project, $this->user);
@@ -109,12 +119,13 @@ class EditCounterController extends Controller
     public function resultAction(Request $request, $project, $username)
     {
         $this->setUpEditCounter($project, $username);
-        // Don't continue if the user doesn't exist.
-        if (!$this->user->existsOnProject($this->project)) {
-            $this->addFlash('notice', 'user-not-found');
-            return $this->redirectToRoute('ec');
-        }
+
+        // Asynchronously collect some of the data that will be shown.
+        $this->editCounter->prepareData($this->container);
+
+        // FIXME: is this needed? It shouldn't ever be a subrequest here in the resultAction.
         $isSubRequest = $this->container->get('request_stack')->getParentRequest() !== null;
+
         return $this->render('editCounter/result.html.twig', [
             'xtTitle' => $this->user->getUsername() . ' - ' . $this->project->getTitle(),
             'xtPage' => 'ec',
@@ -136,11 +147,7 @@ class EditCounterController extends Controller
     public function generalStatsAction($project, $username)
     {
         $this->setUpEditCounter($project, $username);
-        // Don't continue if the user doesn't exist.
-        if (!$this->user->existsOnProject($this->project)) {
-            $this->addFlash('notice', 'user-not-found');
-            return $this->redirectToRoute('ec');
-        }
+
         $isSubRequest = $this->get('request_stack')->getParentRequest() !== null;
         return $this->render('editCounter/general_stats.html.twig', [
             'xtTitle' => $this->user->getUsername(),
@@ -153,20 +160,23 @@ class EditCounterController extends Controller
     }
 
     /**
-     * Display the namespace totals section.
+     * Display or fetch the namespace totals section.
      * @Route("/ec-namespacetotals/{project}/{username}", name="EditCounterNamespaceTotals")
      * @param string $project
      * @param string $username
      * @return Response
      */
-    public function namespaceTotalsAction($project, $username)
+    public function namespaceTotalsAction(Request $request, $project, $username)
     {
         $this->setUpEditCounter($project, $username);
-        // Don't continue if the user doesn't exist.
-        if (!$this->user->existsOnProject($this->project)) {
-            $this->addFlash('notice', 'user-not-found');
-            return $this->redirectToRoute('ec');
+
+        if (in_array('application/json', $request->getAcceptableContentTypes())) {
+            return new JsonResponse(
+                $this->editCounter->namespaceTotals(),
+                Response::HTTP_OK
+            );
         }
+
         $isSubRequest = $this->get('request_stack')->getParentRequest() !== null;
         return $this->render('editCounter/namespace_totals.html.twig', [
             'xtTitle' => $this->user->getUsername(),
@@ -188,11 +198,6 @@ class EditCounterController extends Controller
     public function timecardAction($project, $username)
     {
         $this->setUpEditCounter($project, $username);
-        // Don't continue if the user doesn't exist.
-        if (!$this->user->existsOnProject($this->project)) {
-            $this->addFlash('notice', 'user-not-found');
-            return $this->redirectToRoute('ec');
-        }
         $isSubRequest = $this->get('request_stack')->getParentRequest() !== null;
         $optedInPage = $this->project
             ->getRepository()
@@ -218,11 +223,6 @@ class EditCounterController extends Controller
     public function yearcountsAction($project, $username)
     {
         $this->setUpEditCounter($project, $username);
-        // Don't continue if the user doesn't exist.
-        if (!$this->user->existsOnProject($this->project)) {
-            $this->addFlash('notice', 'user-not-found');
-            return $this->redirectToRoute('ec');
-        }
         $isSubRequest = $this->container->get('request_stack')->getParentRequest() !== null;
         //$yearcounts = $this->editCounterHelper->getYearCounts($username);
         return $this->render('editCounter/yearcounts.html.twig', [
@@ -243,14 +243,17 @@ class EditCounterController extends Controller
      * @param string $username
      * @return Response
      */
-    public function monthcountsAction($project, $username)
+    public function monthcountsAction(Request $request, $project, $username)
     {
         $this->setUpEditCounter($project, $username);
-        // Don't continue if the user doesn't exist.
-        if (!$this->user->existsOnProject($this->project)) {
-            $this->addFlash('notice', 'user-not-found');
-            return $this->redirectToRoute('ec');
+
+        if (in_array('application/json', $request->getAcceptableContentTypes())) {
+            return new JsonResponse(
+                $this->editCounter->monthCounts(),
+                Response::HTTP_OK
+            );
         }
+
         $isSubRequest = $this->container->get('request_stack')->getParentRequest() !== null;
         $optedInPage = $this->project
             ->getRepository()
@@ -277,11 +280,6 @@ class EditCounterController extends Controller
     public function latestglobalAction(Request $request, $project, $username)
     {
         $this->setUpEditCounter($project, $username);
-        // Don't continue if the user doesn't exist.
-        if (!$this->user->existsOnProject($this->project)) {
-            $this->addFlash('notice', 'user-not-found');
-            return $this->redirectToRoute('ec');
-        }
         $isSubRequest = $request->get('htmlonly')
                         || $this->container->get('request_stack')->getParentRequest() !== null;
         return $this->render('editCounter/latest_global.html.twig', [
@@ -292,5 +290,58 @@ class EditCounterController extends Controller
             'project' => $this->project,
             'ec' => $this->editCounter,
         ]);
+    }
+
+    /***** API ENDPOINTS *****/
+
+    /**
+     * Get the general statistics section as JS.
+     * @Route("/ec-pairdata/{project}/{username}", name="EditCounterPairData")
+     * @param string $project
+     * @param string $username
+     * @return Response
+     */
+    public function pairDataAction($project, $username)
+    {
+        $this->setUpEditCounter($project, $username);
+
+        return new JsonResponse(
+            $this->editCounter->getPairData(),
+            Response::HTTP_OK
+        );
+    }
+
+    /**
+     * Get the general statistics section as JS.
+     * @Route("/ec-logcounts/{project}/{username}", name="EditCounterLogCounts")
+     * @param string $project
+     * @param string $username
+     * @return Response
+     */
+    public function logCountsAction($project, $username)
+    {
+        $this->setUpEditCounter($project, $username);
+
+        return new JsonResponse(
+            $this->editCounter->getLogCounts(),
+            Response::HTTP_OK
+        );
+    }
+
+    /**
+     * Get the general statistics section as JS.
+     * @Route("/ec-editsizes/{project}/{username}", name="EditCounterEditSizes")
+     * @param string $project
+     * @param string $username
+     * @return Response
+     */
+    public function editSizesAction($project, $username)
+    {
+        $this->setUpEditCounter($project, $username);
+
+        return new JsonResponse(
+            $this->editCounter->getEditSizeData(),
+            Response::HTTP_OK
+        );
     }
 }
