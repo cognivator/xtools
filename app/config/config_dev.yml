@@ -30,6 +30,11 @@ monolog:
         #    type:   chromephp
         #    level:  info
 
+guzzle:
+    clients:
+        xtools:
+            base_url: "localhost/app_dev.php/"
+
 #swiftmailer:
 #    delivery_address: me@example.com
 

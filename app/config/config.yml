@@ -177,7 +177,6 @@ guzzle:
 
     clients:
         xtools:
-            base_url: "localhost/app_dev.php/"
             options:
                 headers:
                     Accept: "application/json"

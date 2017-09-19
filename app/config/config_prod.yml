@@ -26,6 +26,11 @@ monolog:
         console:
             type:  console
 
+guzzle:
+    clients:
+        xtools:
+            base_url: "https://xtools-dev.wmflabs.org/"
+
 assetic:
     node: /usr/bin/nodejs
     bundles:
